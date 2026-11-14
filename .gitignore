@@ -4,3 +4,4 @@
 gen_key.py
 venv/
 airflow/
+logs/
