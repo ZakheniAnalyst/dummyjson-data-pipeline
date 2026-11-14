@@ -1,0 +1,10 @@
+version: 2
+
+sources:
+  - name: raw
+    database: DUMMYJSON_DB
+    schema: RAW
+    tables:
+      - name: raw_products
+      - name: raw_users
+      - name: raw_carts

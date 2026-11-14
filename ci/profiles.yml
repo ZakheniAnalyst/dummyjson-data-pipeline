@@ -1,0 +1,13 @@
+dummyjson_dbt:
+  target: ci
+  outputs:
+    ci:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      role: ACCOUNTADMIN
+      private_key_path: "{{ env_var('SNOWFLAKE_KEY_PATH') }}"
+      database: DUMMYJSON_DB
+      warehouse: DUMMYJSON_WH
+      schema: STAGING
+      threads: 4

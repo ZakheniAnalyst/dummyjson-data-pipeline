@@ -1,0 +1,6 @@
+*.p8
+*.pub
+*.csv
+gen_key.py
+venv/
+airflow/
