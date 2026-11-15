@@ -35,6 +35,10 @@ flowchart LR
 
 The workflow in `.github/workflows/pipeline.yml` runs three dependent jobs:
 
+![Pipeline status](https://github.com/ZakheniAnalyst/dummyjson-data-pipeline/actions/workflows/pipeline.yml/badge.svg)
+
+![GitHub Actions run](images/pipeline-run.png)
+
 ```
 ingest (API -> S3)  ->  load (COPY INTO Snowflake)  ->  transform (dbt run)
 ```
