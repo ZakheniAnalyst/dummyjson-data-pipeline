@@ -1,35 +1,60 @@
-import os
+name: dummyjson-pipeline
 
-import snowflake.connector
-from cryptography.hazmat.primitives import serialization
+on:
+  schedule:
+    - cron: "0 5 * * *"
+  workflow_dispatch:
 
-key = serialization.load_pem_private_key(
-    os.environ["SNOWFLAKE_PRIVATE_KEY"].encode(), password=None
-)
-der = key.private_bytes(
-    serialization.Encoding.DER,
-    serialization.PrivateFormat.PKCS8,
-    serialization.NoEncryption(),
-)
+env:
+  AWS_DEFAULT_REGION: eu-north-1
 
-conn = snowflake.connector.connect(
-    account=os.environ["SNOWFLAKE_ACCOUNT"],
-    user=os.environ["SNOWFLAKE_USER"],
-    private_key=der,
-    role="ACCOUNTADMIN",
-    warehouse="DUMMYJSON_WH",
-    database="DUMMYJSON_DB",
-    schema="RAW",
-)
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install requests boto3
+      - name: API to S3
+        run: python ingest.py
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
 
-try:
-    cur = conn.cursor()
-    for name in ["products", "users", "carts"]:
-        cur.execute(f"""
-            COPY INTO raw_{name} (v, _source_file)
-            FROM (SELECT $1, METADATA$FILENAME FROM @dummyjson_stage/{name}/)
-            PATTERN = '.*[.]json'
-        """)
-        print(name, cur.fetchall())
-finally:
-    conn.close()
+  load:
+    needs: ingest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install snowflake-connector-python cryptography
+      - name: S3 to Snowflake RAW
+        run: python load_to_snowflake.py
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_PRIVATE_KEY }}
+
+  transform:
+    needs: load
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install dbt-snowflake==1.12.5
+      - name: Write key file
+        run: printf '%s\n' "$SNOWFLAKE_PRIVATE_KEY" > "$RUNNER_TEMP/dbt_key.p8"
+        env:
+          SNOWFLAKE_PRIVATE_KEY: ${{ secrets.SNOWFLAKE_PRIVATE_KEY }}
+      - name: dbt run
+        run: dbt run --project-dir dummyjson_dbt --profiles-dir ci
+        env:
+          SNOWFLAKE_ACCOUNT: ${{ secrets.SNOWFLAKE_ACCOUNT }}
+          SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
+          SNOWFLAKE_KEY_PATH: ${{ runner.temp }}/dbt_key.p8
